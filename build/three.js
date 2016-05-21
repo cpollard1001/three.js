@@ -5784,7 +5784,7 @@ THREE.Ray.prototype = {
 		this.direction.copy( v ).sub( this.origin ).normalize();
 
 		return this;
-		
+
 	},
 
 	recast: function () {
@@ -5855,7 +5855,7 @@ THREE.Ray.prototype = {
 
 		return function ( v0, v1, optionalPointOnRay, optionalPointOnSegment ) {
 
-			// from http://www.geometrictools.com/LibMathematics/Distance/Wm5DistRay3Segment3.cpp
+			// from http://www.geometrictools.com/GTEngine/Include/Mathematics/GteDistRaySegment.h
 			// It returns the min distance between the ray and the segment
 			// defined by v0 and v1
 			// It can also set two optional targets :
@@ -6176,7 +6176,7 @@ THREE.Ray.prototype = {
 
 		return function ( a, b, c, backfaceCulling, optionalTarget ) {
 
-			// from http://www.geometrictools.com/LibMathematics/Intersection/Wm5IntrRay3Triangle3.cpp
+			// from http://www.geometrictools.com/GTEngine/Include/Mathematics/GteIntrRay3Triangle3.h
 
 			edge1.subVectors( b, a );
 			edge2.subVectors( c, a );
@@ -22827,6 +22827,14 @@ THREE.Mesh.prototype = Object.assign( Object.create( THREE.Object3D.prototype ),
 			vB.fromArray( positions, b * 3 );
 			vC.fromArray( positions, c * 3 );
 
+			if ( object.boneTransform ) {
+
+				vA = object.boneTransform( vA, a );
+				vB = object.boneTransform( vB, b );
+				vC = object.boneTransform( vC, c );
+
+			}
+
 			var intersection = checkIntersection( object, raycaster, ray, vA, vB, vC, intersectionPoint );
 
 			if ( intersection ) {
@@ -22990,6 +22998,14 @@ THREE.Mesh.prototype = Object.assign( Object.create( THREE.Object3D.prototype ),
 						fvA = vA;
 						fvB = vB;
 						fvC = vC;
+
+					}
+
+					if ( this.boneTransform ) {
+
+						fvA = this.boneTransform( fvA, face.a );
+						fvB = this.boneTransform( fvB, face.b );
+						fvC = this.boneTransform( fvC, face.c );
 
 					}
 
@@ -23428,6 +23444,48 @@ THREE.SkinnedMesh.prototype = Object.assign( Object.create( THREE.Mesh.prototype
 	}
 
 } );
+
+THREE.SkinnedMesh.prototype.boneTransform = ( function() {
+
+	var clone = new THREE.Vector3(), result = new THREE.Vector3(), skinIndices = new THREE.Vector4(), skinWeights = new THREE.Vector4();
+	var temp = new THREE.Vector3(), tempMatrix = new THREE.Matrix4(), properties = [ 'x', 'y', 'z', 'w' ];
+
+	return function( vertex, index ) {
+
+		if ( this.geometry instanceof THREE.BufferGeometry ) {
+
+			var index4 = index * 4;
+			skinIndices.fromArray( this.geometry.attributes.skinIndex.array, index4 );
+			skinWeights.fromArray( this.geometry.attributes.skinWeight.array, index4 );
+
+		} else if ( this.geometry instanceof THREE.Geometry ) {
+
+			skinIndices.copy( this.geometry.skinIndices[ index ] );
+			skinWeights.copy( this.geometry.skinWeights[ index ] );
+
+		}
+
+		var clone = vertex.clone().applyMatrix4( this.bindMatrix ); result.set( 0, 0, 0 );
+
+		for ( var i = 0; i < 4; i ++ ) {
+
+			var skinWeight = skinWeights[ properties[ i ] ];
+
+			if ( skinWeight != 0 ) {
+
+				var boneIndex = skinIndices[ properties[ i ] ];
+				tempMatrix.multiplyMatrices( this.skeleton.bones[ boneIndex ].matrixWorld, this.skeleton.boneInverses[ boneIndex ] );
+				result.add( temp.copy( clone ).applyMatrix4( tempMatrix ).multiplyScalar( skinWeight ) );
+
+			}
+
+		}
+
+		return clone.copy( result.applyMatrix4( this.bindMatrixInverse ) );
+
+	};
+
+} )();
 
 // File:src/objects/LOD.js
 
@@ -28670,7 +28728,7 @@ THREE.WebGLCapabilities = function ( gl, extensions, parameters ) {
 
 	this.getMaxPrecision = getMaxPrecision;
 
-	this.precision = parameters.precision !== undefined ? parameters.precision : 'highp',
+	this.precision = parameters.precision !== undefined ? parameters.precision : 'highp';
 	this.logarithmicDepthBuffer = parameters.logarithmicDepthBuffer !== undefined ? parameters.logarithmicDepthBuffer : false;
 
 	this.maxTextures = gl.getParameter( gl.MAX_TEXTURE_IMAGE_UNITS );
